@@ -1,0 +1,76 @@
+version: "3.8"
+services:
+
+  wallet-driving-application:
+    container_name: wallet-driving-application
+    image: ocanades/wallet-wda:1.0.0
+    ports:
+      - "4200:4200"
+    networks:
+      local_network:
+
+  wallet-creation-application:
+    container_name: wallet-creation-application
+    image: ocanades/wallet-wca:1.0.0
+    environment:
+      SPRING_PROFILES_ACTIVE: "local"
+      SPRING_DATASOURCE_URL: "jdbc:mysql://mysql:3306/test?useUnicode=true&characterEncoding=utf8&useSSL=false"
+      SPRING_DATASOURCE_USERNAME: "root"
+      SPRING_DATASOURCE_PASSWORD: "D83Wh$tb83D8"
+      SERVER_PORT: "8080"
+      APP_URL_API: "https://walletapidev.in2.es"
+      APP_URL_ORION: "http://wallet-orion:1026/v2/entities"
+    command:
+      - run
+    links:
+      - mysql
+    ports:
+      - "8080:8080"
+    networks:
+      local_network:
+
+  mysql:
+    container_name: mysql
+    image: mysql:8.0
+    command: "--default-authentication-plugin=mysql_native_password"
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: "D83Wh$tb83D8"
+      MYSQL_DATABASE: "test"
+      MYSQL_USER: "user"
+      MYSQL_PASSWORD: "1234"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    networks:
+      local_network:
+
+  orion:
+    container_name: orion
+    image: fiware/orion:latest
+    command: "-dbhost mongodb -port 1026"
+    links:
+      - mongodb
+    ports:
+      - "1026:1026"
+    networks:
+      local_network:
+
+  mongodb:
+    container_name: mongodb
+    image: mongo:4.4
+    command: "--nojournal"
+    volumes:
+      - orion_data:/data/db
+      - orion_db_config:/data/configdb
+    networks:
+      local_network:
+
+networks:
+    local_network:
+
+volumes:
+  orion_data:
+  orion_db_config:
+  mysql_data:
