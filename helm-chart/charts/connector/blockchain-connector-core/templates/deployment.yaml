@@ -77,7 +77,7 @@ spec:
       volumes:
         - name: config-volume
           configMap:
-            name: bcc-configmap
+            name: {{ include "bcc.fullname" . }}
             items:
               - key: custom-config.yml
                 path: integration-config.yml
