@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bcc.fullname" . }}
+  # dont set a namespace, namespaces are handled by helm itself
+  labels:
+    {{ include "bcc.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.deployment.replicaCount }}
+    {{- end }}
+  revisionHistoryLimit: {{ .Values.deployment.revisionHistoryLimit }}
+  strategy:
+    {{- with .Values.deployment.updateStrategy }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "bcc.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+          {{ include "bcc.labels" . | nindent 8 }}
+          {{- with .Values.deployment.additionalLabels }}
+          {{- toYaml . | nindent 8 }}
+          {{- end }}
+      # both values have to be checked, since (with the previous way) prometheus scrape would have not been added if enabled
+      {{- if or (.Values.deployment.additionalAnnotations) (.Values.prometheus.enabled) -}}
+      annotations:
+        prometheus.io/scrape: {{ .Values.prometheus.enabled | quote }}
+        prometheus.io/path: {{ .Values.prometheus.path }}
+        prometheus.io/port: {{ .Values.prometheus.port }}
+        {{- with .Values.deployment.additionalAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    {{- end }}
+    spec:
+      serviceAccountName: {{ include "bcc.serviceAccountName" . }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.deployment.image.repository }}:{{ .Values.deployment.image.tag }}"
+          imagePullPolicy: {{ .Values.deployment.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.port}}
+              protocol: TCP
+            - name: http-health
+              containerPort: {{ .Values.deployment.healthPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http-health
+            initialDelaySeconds: {{ .Values.deployment.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.deployment.livenessProbe.periodSeconds }}
+            successThreshold: {{ .Values.deployment.livenessProbe.successThreshold }}
+            timeoutSeconds: {{ .Values.deployment.livenessProbe.timeoutSeconds }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http-health
+            initialDelaySeconds: {{ .Values.deployment.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.deployment.readinessProbe.periodSeconds }}
+            successThreshold: {{ .Values.deployment.readinessProbe.successThreshold }}
+            timeoutSeconds: {{ .Values.deployment.readinessProbe.timeoutSeconds }}
+          env:
+            # profile should be configurable
+            - name: SPRING_PROFILES_ACTIVE
+              value: {{ .Values.activeProfile }}
+            # putting the config under the /src/main/resources path leads to a very confusing folder layout of the running container
+            # it looks like a classloader-path, but is in an(otherwise empty) src folder. Debugging a broken deployment becomes hell;)
+            - name: SPRING_CONFIG_IMPORT
+              value: "/config/integration-config.yml"
+            ## it would be good to have some additional values configurable through the chart, f.e. 
+            # Setting the ports throught the same value is a best practice, to ensure the deployment does not deviate in that regard
+            - name: SERVER_PORT
+              value: {{ .Values.port }}
+            - name: MANAGEMENT_PORT
+              value: {{ .Values.managementPort }}
+            # making the root loglevel visible and configurable
+            - name: LOGGING_LEVEL_ROOT
+              value: {{ .Value.logLevel }}
+            # the application.yml contains a db config -> is a db actually used? Then the config should also be made available 
+            - name: SPRING_DATASOURCE_URL
+              value: {{ .Value.db.url }}
+            - name: SPRING_DATASOURCE_DRIVER_CLASS_NAME
+              value: {{ .Value.db.driver }}
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ .Value.db.username }}
+            # should be moved to a secret 
+            - name: SPRING_DATASOURCE_PASSWORD
+              value: {{ .Value.db.password }}           
+            # in order to give access to all configurations(f.e. database, logging, endpoints) an additonalEnv-Vars block is helpful
+            {{- with .Values.additionalEnvVars }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - name: config-volume
+              mountPath: "/config/"
+              readOnly: true
+          resources:
+            {{- toYaml .Values.deployment.resources | nindent 12 }}
+      volumes:
+        - name: config-volume
+          configMap:
+            name: {{ include "bcc.fullname" . }}
+            ## no need to rename the key in the map, that makes it less readable
+      {{- with .Values.deployment.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.deployment.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.deployment.tolerations }}
+      tolerations:
+         {{- toYaml . | nindent 8 }}
+      {{- end }}
+      restartPolicy: Always

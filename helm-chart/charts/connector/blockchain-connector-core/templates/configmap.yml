@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "bcc.fullname" . }}
+data:
+  # the config structure is somewhat confusing, I would recommend to restructure it.
+  # when reading the config, it looks as if the lower part is just for the blockchain connector, while the upper part is for the 
+  # orion connector.
+  integration-config.yml: |
+    orion-ld-if:
+      orion-ld:
+        # I have seen that this address is used for connecting orion AND as the location in the events
+        # Since the connector will (usually) connect to Orion through the internal dns(e.g. something like http://orion-ld:1026), while the consumer 
+        # of the event uses the external address(f.e. https://orion-ld.dome.eu), probably with IAM in front, we need the ability to configure it seperatly 
+        domain: {{ .Values.orion.address }}
+        path:
+          entities: {{ .Values.orion.entitiesPath }}
+          subscriptions: {{ .Values.orion.subscriptionPath }}
+      api:
+        domain: {{ .Values.adapter.host }}
+        path:
+          subscription: {{ .Values.adapter.subscriptionPath }}
+          entities:  {{ .Values.adapter.publishPath }}
+      subscription:
+        type: {{ .Values.orion.subscription.type }}
+        #  there are 2 notfication endpoints configured. Can they be different? If not, it makes sense to merge the config
+        notification-endpoint-uri: {{ .Values.orion.subscription.notificationEndpoint }}
+        entities: >
+           {{ .Values.orion.subscription.entities }}
+        id-prefix: {{ .Values.orion.subscription.prefix | quote }}
+    blockchain-node-if:
+      api:
+        domain: {{ .Values.dlt.address }}
+        path:
+          configure-node: {{ .Values.dlt.configurationPath }}
+          publish: {{ .Values.dlt.publishPath }}
+          subscribe: {{ .Values.dlt.subscribePath }}
+      subscription:
+        active: {{ .Values.dlt.subscription.active }}
+        notification-endpoint-uri: {{ .Values.dlt.subscription.notificationEndpoint }}
+        event-type: {{ .Values.dlt.subscription.eventType }}
+      node:
+        rpcAddress: {{ .Values.dlt.node.rpcAddress }}
+        userEthereumAddress: {{ .Values.dlt.node.userEthereumAddress }}
